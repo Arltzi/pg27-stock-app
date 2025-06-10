@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Loader2 } from "lucide-react"
+import { AlertCircle, Loader2 } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import StockInputWithSuggestions from "./stock-input-with-suggestions"
 
 // Define timeframe options
 const timeframes = [
@@ -22,23 +23,30 @@ export default function StockComparisonChart() {
   const [chartData, setChartData] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [usingSampleData, setUsingSampleData] = useState(false)
 
   const fetchStockData = async () => {
     setLoading(true)
     setError("")
+    setUsingSampleData(false)
 
     try {
       const response = await fetch(`/api/stocks?stock1=${stock1}&stock2=${stock2}&timeframe=${timeframe}`)
+      const data = await response.json()
 
       if (!response.ok) {
-        throw new Error("Failed to fetch stock data")
+        throw new Error(data.error || "Failed to fetch stock data")
       }
 
-      const data = await response.json()
+      // Check if we're using sample data (this would be indicated in the response)
+      if (data.usingSampleData) {
+        setUsingSampleData(true)
+      }
+
       setChartData(data)
     } catch (err) {
-      setError("Error fetching stock data. Please try again.")
-      console.error(err)
+      console.error("Error fetching stock data:", err)
+      setError(err instanceof Error ? err.message : "Failed to fetch stock data. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -79,30 +87,20 @@ export default function StockComparisonChart() {
     <div className="space-y-6">
       {/* Stock Selection */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="stock1" className="block text-sm font-medium mb-1">
-            Stock 1
-          </label>
-          <Input
-            id="stock1"
-            value={stock1}
-            onChange={(e) => setStock1(e.target.value.toUpperCase())}
-            placeholder="e.g. AAPL"
-            className="uppercase"
-          />
-        </div>
-        <div>
-          <label htmlFor="stock2" className="block text-sm font-medium mb-1">
-            Stock 2
-          </label>
-          <Input
-            id="stock2"
-            value={stock2}
-            onChange={(e) => setStock2(e.target.value.toUpperCase())}
-            placeholder="e.g. MSFT"
-            className="uppercase"
-          />
-        </div>
+        <StockInputWithSuggestions
+          value={stock1}
+          onChange={setStock1}
+          placeholder="e.g. AAPL"
+          label="Stock 1"
+          id="stock1"
+        />
+        <StockInputWithSuggestions
+          value={stock2}
+          onChange={setStock2}
+          placeholder="e.g. MSFT"
+          label="Stock 2"
+          id="stock2"
+        />
       </div>
 
       {/* Timeframe Selection */}
@@ -126,7 +124,24 @@ export default function StockComparisonChart() {
         </div>
       </div>
 
-      {error && <p className="text-red-500 text-center">{error}</p>}
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {usingSampleData && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Using Sample Data</AlertTitle>
+          <AlertDescription>
+            The API request failed, so we're displaying sample data. For real-time data, please try again later or use a
+            different API key.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Card>
         <CardHeader>

@@ -31,6 +31,6 @@ An Android app that allows users to compare the performance of two different sto
 
 1. **Clone the repository**
 
-```bash
+\`\`\`bash
 git clone https://github.com/Arltzi/pg27-stock-app.git
 cd pg27-stock-app
