@@ -32,21 +32,24 @@ export default function StockComparisonChart() {
 
     try {
       const response = await fetch(`/api/stocks?stock1=${stock1}&stock2=${stock2}&timeframe=${timeframe}`)
-      const data = await response.json()
+      const responseData = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to fetch stock data")
+        throw new Error(responseData.error || "Failed to fetch stock data")
       }
 
-      // Check if we're using sample data (this would be indicated in the response)
-      if (data.usingSampleData) {
+      // Check if we're using sample data
+      if (responseData.usingSampleData) {
         setUsingSampleData(true)
       }
 
-      setChartData(data)
+      // The actual chart data is now in the data property
+      setChartData(responseData.data || [])
     } catch (err) {
       console.error("Error fetching stock data:", err)
       setError(err instanceof Error ? err.message : "Failed to fetch stock data. Please try again.")
+      // Set empty chart data on error
+      setChartData([])
     } finally {
       setLoading(false)
     }
@@ -64,19 +67,26 @@ export default function StockComparisonChart() {
   }, [stock1, stock2, timeframe])
 
   const calculateDomain = () => {
-    if (chartData.length === 0) return ["dataMin - 5", "dataMax + 5"]
+    if (!chartData || chartData.length === 0) return [80, 120] // Default domain if no data
 
     // Find min and max values across both stocks
     let min = Number.POSITIVE_INFINITY
     let max = Number.NEGATIVE_INFINITY
 
     chartData.forEach((dataPoint) => {
-      const stock1Value = Number.parseFloat(dataPoint[stock1])
-      const stock2Value = Number.parseFloat(dataPoint[stock2])
+      const stock1Value = dataPoint[stock1]
+      const stock2Value = dataPoint[stock2]
 
-      min = Math.min(min, stock1Value, stock2Value)
-      max = Math.max(max, stock1Value, stock2Value)
+      if (stock1Value !== undefined) min = Math.min(min, stock1Value)
+      if (stock2Value !== undefined) min = Math.min(min, stock2Value)
+      if (stock1Value !== undefined) max = Math.max(max, stock1Value)
+      if (stock2Value !== undefined) max = Math.max(max, stock2Value)
     })
+
+    // If we couldn't find valid min/max values, use defaults
+    if (min === Number.POSITIVE_INFINITY || max === Number.NEGATIVE_INFINITY) {
+      return [80, 120]
+    }
 
     // Add padding (10% of the range)
     const padding = (max - min) * 0.1

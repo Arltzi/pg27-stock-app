@@ -902,12 +902,16 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Try to fetch data from Alpha Vantage API
+    // Try to fetch data from Alpha Vantage API or use sample data
     let stock1Data, stock2Data
+    let usingSampleData = false
 
     try {
       // Try to fetch from API first
-      ;[stock1Data, stock2Data] = await Promise.all([fetchStockData(stock1), fetchStockData(stock2)])
+      const [stock1Response, stock2Response] = await Promise.all([fetchStockData(stock1), fetchStockData(stock2)])
+
+      stock1Data = stock1Response
+      stock2Data = stock2Response
 
       // Validate the API response
       if (!stock1Data["Time Series (Daily)"] || !stock2Data["Time Series (Daily)"]) {
@@ -917,23 +921,30 @@ export async function GET(request: Request) {
       console.error("API fetch failed, using sample data:", apiError)
 
       // Fall back to sample data if API fails
-      stock1Data = SAMPLE_DATA[stock1] || SAMPLE_DATA["AAPL"]
-      stock2Data = SAMPLE_DATA[stock2] || SAMPLE_DATA["MSFT"]
+      usingSampleData = true
 
-      // If we don't have sample data for the requested stocks, use AAPL and MSFT
-      if (!stock1Data || !stock2Data) {
-        stock1Data = SAMPLE_DATA["AAPL"]
-        stock2Data = SAMPLE_DATA["MSFT"]
-      }
+      // Use sample data for the requested stocks or default to AAPL/MSFT
+      stock1Data = SAMPLE_DATA[stock1.toUpperCase()] || SAMPLE_DATA["AAPL"]
+      stock2Data = SAMPLE_DATA[stock2.toUpperCase()] || SAMPLE_DATA["MSFT"]
     }
 
     // Process and normalize the data for comparison
     const processedData = processStockData(stock1Data, stock2Data, stock1, stock2, timeframe)
 
-    return NextResponse.json(processedData)
+    // Add flag to indicate if we're using sample data
+    return NextResponse.json({
+      data: processedData,
+      usingSampleData,
+    })
   } catch (error) {
     console.error("Error processing stock data:", error)
-    return NextResponse.json({ error: "Failed to process stock data. Please try different symbols." }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Failed to process stock data. Please try different symbols.",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }
 
@@ -980,6 +991,10 @@ function processStockData(data1: any, data2: any, symbol1: string, symbol2: stri
     const dates1 = Object.keys(timeSeries1)
     const dates2 = Object.keys(timeSeries2)
 
+    if (dates1.length === 0 || dates2.length === 0) {
+      throw new Error("No data available for one or both stocks")
+    }
+
     // Find common dates between both datasets
     const commonDates = dates1.filter((date) => dates2.includes(date))
 
@@ -1000,6 +1015,10 @@ function processStockData(data1: any, data2: any, symbol1: string, symbol2: stri
     // Get the first closing prices to normalize
     const firstClose1 = Number.parseFloat(timeSeries1[limitedDates[0]]["4. close"])
     const firstClose2 = Number.parseFloat(timeSeries2[limitedDates[0]]["4. close"])
+
+    if (isNaN(firstClose1) || isNaN(firstClose2)) {
+      throw new Error("Invalid closing price data")
+    }
 
     // Create normalized data points
     return limitedDates.map((date) => {
